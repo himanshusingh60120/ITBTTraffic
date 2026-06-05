@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ITBT · Traffic Report Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111418; --paper:#f4f1ea; --line:#1a1d22;
+    --accent:#c8341f; --accent2:#1c4f8f; --muted:#6b6457;
+    --card:#fbf9f4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'IBM Plex Mono',monospace; background:var(--paper); color:var(--ink);
+    min-height:100vh; padding:32px 20px;
+    background-image:radial-gradient(var(--line) 0.5px, transparent 0.5px);
+    background-size:22px 22px; background-position:-11px -11px;
+  }
+  .wrap{max-width:760px; margin:0 auto}
+  header{border-bottom:3px solid var(--line); padding-bottom:18px; margin-bottom:6px}
+  .kicker{font-size:11px; letter-spacing:.32em; text-transform:uppercase; color:var(--accent); font-weight:600}
+  h1{font-family:'Fraunces',serif; font-weight:900; font-size:clamp(34px,6vw,56px); line-height:.95; letter-spacing:-.02em; margin-top:8px}
+  .sub{font-size:13px; color:var(--muted); margin-top:10px; max-width:52ch; line-height:1.5}
+  .grid-meta{display:flex; gap:18px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-top:14px; flex-wrap:wrap}
+  .grid-meta b{color:var(--ink); font-weight:600}
+
+  .step{
+    background:var(--card); border:2px solid var(--line); border-radius:2px;
+    padding:22px 24px; margin-top:22px; position:relative;
+    box-shadow:5px 5px 0 var(--line);
+  }
+  .step.locked{opacity:.45; pointer-events:none; box-shadow:none}
+  .step-no{
+    position:absolute; top:-14px; left:18px; background:var(--accent); color:#fff;
+    font-family:'Fraunces',serif; font-weight:900; font-size:15px; width:28px; height:28px;
+    display:grid; place-items:center; border-radius:50%;
+  }
+  .step h2{font-family:'Fraunces',serif; font-weight:600; font-size:20px; margin-bottom:4px}
+  .step p.hint{font-size:12px; color:var(--muted); line-height:1.55; margin-bottom:14px}
+
+  button,.btn{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;
+    letter-spacing:.04em; text-transform:uppercase; cursor:pointer;
+    border:2px solid var(--line); background:var(--ink); color:var(--paper);
+    padding:11px 18px; border-radius:2px; transition:transform .08s, box-shadow .08s;
+    display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+  }
+  button:hover,.btn:hover{transform:translate(-2px,-2px); box-shadow:3px 3px 0 var(--accent)}
+  button:active{transform:none; box-shadow:none}
+  button:disabled{opacity:.4; cursor:not-allowed; transform:none; box-shadow:none}
+  .btn.ghost{background:transparent; color:var(--ink)}
+  .btn.accent{background:var(--accent); border-color:var(--accent)}
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
+
+  label{display:block; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:5px}
+  input[type=date]{
+    font-family:'IBM Plex Mono',monospace; font-size:14px; padding:9px 11px;
+    border:2px solid var(--line); border-radius:2px; background:var(--paper); color:var(--ink);
+  }
+  .status{font-size:12px; margin-top:14px; line-height:1.5; padding:10px 12px; border-left:3px solid var(--accent2); background:rgba(28,79,143,.06)}
+  .status.err{border-left-color:var(--accent); background:rgba(200,52,31,.07)}
+  .status.ok{border-left-color:#1c7f3f; background:rgba(28,127,63,.07)}
+  .ext{font-size:11px; color:var(--accent2); word-break:break-all; margin-top:8px}
+  footer{margin-top:30px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:center}
+  .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--muted); margin-right:6px}
+  .dot.live{background:#1c7f3f; animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">IT Business Today · Internal</div>
+    <h1>Traffic&nbsp;Report<br>Generator</h1>
+    <p class="sub">Pulls Google Analytics 4 sessions by landing page and by country, cleans and de-duplicates the URLs, and builds the weekly Excel workbook — Friday-to-Thursday or any range you pick.</p>
+    <div class="grid-meta">
+      <span><span class="dot live"></span>GA4 property <b>362728230</b></span>
+      <span>Metric <b>sessions</b></span>
+      <span>Output <b>.xlsx</b></span>
+    </div>
+  </header>
+
+  <!-- STEP 1 -->
+  <section class="step" id="step1">
+    <div class="step-no">1</div>
+    <h2>Get the access file</h2>
+    <p class="hint">Download the OAuth client file (already configured for this tool). You only need this if you're setting the app up in Google Cloud — most users skip straight to signing in.</p>
+    <div class="row">
+      <button id="dlJson">↓ Download client JSON</button>
+      <a class="btn ghost" id="cloudLink" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Open Google Cloud Console ↗</a>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step" id="step2">
+    <div class="step-no">2</div>
+    <h2>Sign in with Google</h2>
+    <p class="hint">Click below, choose <b>hsingh@kingsresearch.com</b> (or any account with Viewer access to the property), and approve. Google sends you right back here — no code to copy.</p>
+    <div class="row">
+      <a class="btn accent" id="signin" href="/api/auth-start">→ Sign in &amp; authorise</a>
+    </div>
+    <div class="status" id="authStatus"><span class="dot"></span>Not signed in yet.</div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step locked" id="step3">
+    <div class="step-no">3</div>
+    <h2>Pick dates &amp; generate</h2>
+    <p class="hint">Choose the reporting window (inclusive). Default is last Friday → yesterday.</p>
+    <div class="row">
+      <div><label for="start">Start date</label><input type="date" id="start"></div>
+      <div><label for="end">End date</label><input type="date" id="end"></div>
+      <button id="gen">⚙ Generate report</button>
+    </div>
+    <div class="status" id="genStatus" style="display:none"></div>
+  </section>
+
+  <footer>Internal tool · IT Business Today · data via Google Analytics 4</footer>
+</div>
+
+<script>
+// ---- client JSON download (template; real secret lives server-side as env var) ----
+const CLIENT_JSON = {
+  installed: {
+    client_id: "228073922219-et0ekpenvrvcjoc4bul8eonscu7r9snf.apps.googleusercontent.com",
+    project_id: "gsc-ranks-491206",
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+    redirect_uris: ["http://localhost"]
+  }
+};
+document.getElementById('dlJson').onclick = () => {
+  const blob = new Blob([JSON.stringify(CLIENT_JSON, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'client_secret.json';
+  a.click();
+};
+
+// ---- capture token from #token=... after Google redirect ----
+let TOKEN = null;
+function readToken(){
+  const m = location.hash.match(/token=([^&]+)/);
+  if (m){
+    TOKEN = decodeURIComponent(m[1]);
+    history.replaceState(null,'',location.pathname); // clean the URL
+  }
+}
+readToken();
+
+// surface auth errors passed via ?error=
+const qErr = new URLSearchParams(location.search).get('error');
+
+const authStatus = document.getElementById('authStatus');
+const step3 = document.getElementById('step3');
+if (TOKEN){
+  authStatus.className = 'status ok';
+  authStatus.innerHTML = '<span class="dot live"></span>Signed in. You can generate reports below.';
+  step3.classList.remove('locked');
+} else if (qErr){
+  authStatus.className = 'status err';
+  authStatus.textContent = 'Sign-in failed: ' + qErr;
+}
+
+// ---- default date range: last Friday → yesterday ----
+function iso(d){ return d.toISOString().slice(0,10); }
+const today = new Date();
+const yest = new Date(today); yest.setDate(today.getDate()-1);
+let fri = new Date(yest); while (fri.getDay() !== 5) fri.setDate(fri.getDate()-1);
+document.getElementById('start').value = iso(fri);
+document.getElementById('end').value = iso(yest);
+
+// ---- generate ----
+const genStatus = document.getElementById('genStatus');
+document.getElementById('gen').onclick = async () => {
+  const start = document.getElementById('start').value;
+  const end = document.getElementById('end').value;
+  if (!start || !end){ showGen('Pick both dates.','err'); return; }
+  if (start > end){ showGen('Start date is after end date.','err'); return; }
+  showGen('Querying GA4 and building the workbook…','');
+  try{
+    const r = await fetch('/api/report', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: TOKEN, start, end })
+    });
+    if (!r.ok){ showGen('Error: ' + (await r.text()), 'err'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ITBT_Traffic_Data_${start}_to_${end}.xlsx`;
+    a.click();
+    showGen('Done — your .xlsx has downloaded.', 'ok');
+  }catch(e){ showGen('Request failed: ' + e.message, 'err'); }
+};
+function showGen(msg, kind){
+  genStatus.style.display = 'block';
+  genStatus.className = 'status' + (kind ? ' '+kind : '');
+  genStatus.innerHTML = (kind==='' ? '<span class="dot live"></span>' : '') + msg;
+}
+</script>
+</body>
+</html>
