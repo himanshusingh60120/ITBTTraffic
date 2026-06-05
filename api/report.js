@@ -12,10 +12,6 @@ const METRIC = 'sessions';          // change to 'totalUsers' to match a Total-u
 const URL_DIMENSION = 'landingPage';
 const EXTRA_EXCLUSIONS = [];        // e.g. ['/author/']
 
-function excelSerial(d) {
-  const utc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  return Math.round(utc / 86400000) + 25569;
-}
 function dKey(d) { return d.toISOString().slice(0, 10); }
 function gaDateToKey(s) { return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`; }
 
@@ -63,7 +59,6 @@ module.exports = async (req, res) => {
     // date columns newest → oldest
     const dates = [];
     for (let d = new Date(endD); d >= startD; d.setUTCDate(d.getUTCDate() - 1)) dates.push(new Date(d));
-    const serials = dates.map(excelSerial);
     const dkeys = dates.map(dKey);
 
     // URL sheet
@@ -97,22 +92,33 @@ module.exports = async (req, res) => {
     const totalRow = dkeys.map(k => Object.keys(urlMap).reduce((s, u) => s + Math.round(urlMap[u][k] || 0), 0));
     const japanRow = daily(countryMap[JAPAN_COUNTRY] || {});
 
+    // header dates as real Date objects (so Excel treats them as dates, not the data)
+    const headerDates = dates.map(d => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())));
+    const DATE_FMT = 'dd-mmm-yy';   // e.g. 05-Jun-26
+    const INT_FMT  = '#,##0';       // plain integer with thousands separator
+
     const wb = new ExcelJS.Workbook();
     const data = wb.addWorksheet('Data');
-    data.addRow(['Data', ...serials]);
+    data.addRow(['Data', ...headerDates]);
     data.addRow(['Total Traffic', ...totalRow]);
     data.addRow(['Japan Traffic', ...japanRow]);
     const cw = wb.addWorksheet('Country Wise');
-    cw.addRow(['Country', ...serials]);
+    cw.addRow(['Country', ...headerDates]);
     countriesSorted.forEach(c => cw.addRow([c, ...daily(countryMap[c])]));
     const tt = wb.addWorksheet('Total Traffic');
-    tt.addRow(['Webpage', ...serials]);
+    tt.addRow(['Webpage', ...headerDates]);
     urlsSorted.forEach(u => tt.addRow([u, ...daily(urlMap[u])]));
 
     [data, cw, tt].forEach(sh => {
       sh.getRow(1).font = { bold: true };
       sh.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
-      for (let c = 2; c <= serials.length + 1; c++) sh.getColumn(c).numFmt = 'm/d/yyyy';
+      const ncols = dates.length + 1;
+      // row 1 (dates only): date format, skip A1 which is a text label
+      for (let c = 2; c <= ncols; c++) sh.getRow(1).getCell(c).numFmt = DATE_FMT;
+      // data rows (everything below row 1): integer format, skip column A labels
+      for (let r = 2; r <= sh.rowCount; r++) {
+        for (let c = 2; c <= ncols; c++) sh.getRow(r).getCell(c).numFmt = INT_FMT;
+      }
     });
 
     const buf = await wb.xlsx.writeBuffer();
